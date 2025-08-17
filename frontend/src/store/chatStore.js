@@ -1,6 +1,7 @@
 // src/store/chatStore.js
 import { create } from 'zustand';
 import api from '../services/api';
+import { getCurrentDateTime, ensureCurrentDate } from '../utils/dateUtils';
 
 export const useChatStore = create((set, get) => ({
     chats: [],
@@ -255,46 +256,137 @@ export const useChatStore = create((set, get) => ({
             throw new Error(errorMessage);
         }
     },
+    // Add these methods to your existing chatStore.js
 
+
+    // Update your createProjectFromChat method
     createProjectFromChat: async (chatId) => {
+        set({ loading: true, error: null });
+
+        try {
+            const state = get();
+            const response = await fetch(`${API_BASE_URL}/api/chats/${chatId}/create-project`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${state.user?.token}`,
+                },
+                body: JSON.stringify({
+                    // Ensure current timestamp is sent
+                    createdAt: getCurrentDateTime(),
+                    updatedAt: getCurrentDateTime(),
+                }),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Failed to create project from chat');
+            }
+
+            const result = await response.json();
+
+            // Fix any backdated timestamps in the response
+            if (result.data?.project) {
+                result.data.project.createdAt = ensureCurrentDate(result.data.project.createdAt);
+                result.data.project.updatedAt = ensureCurrentDate(result.data.project.updatedAt);
+            }
+
+            if (result.data?.subtasks) {
+                result.data.subtasks = result.data.subtasks.map(subtask => ({
+                    ...subtask,
+                    createdAt: ensureCurrentDate(subtask.createdAt),
+                    updatedAt: ensureCurrentDate(subtask.updatedAt),
+                    dueDate: subtask.dueDate ? ensureCurrentDate(subtask.dueDate) : null,
+                }));
+            }
+
+            set({ loading: false });
+            return result;
+        } catch (error) {
+            set({ loading: false, error: error.message });
+            throw error;
+        }
+    },
+
+    // Update your sendMessage method
+    sendMessage: async (chatId, content) => {
         const state = get();
 
-        if (!state.messages || state.messages.length < 2) {
-            throw new Error('Not enough conversation content to create a project. Please have a more detailed discussion first.');
+        if (!state.user?.token) {
+            throw new Error('User not authenticated');
         }
 
-        const totalContentLength = state.messages.reduce((acc, msg) => acc + (msg.content?.length || 0), 0);
-        if (totalContentLength < 100) {
-            throw new Error('The conversation is too brief to extract meaningful project information. Please provide more details about your project idea.');
-        }
+        set({ sending: true, error: null });
 
-        set({ loading: true, error: null });
         try {
-            const response = await api.post(`/chats/${chatId}/create-project`);
-            set({ loading: false });
-
-            // Return the project data so the component can handle routing
-            return {
-                success: true,
-                project: response.data.data.project,
-                projectId: response.data.data.project._id
+            // Add message optimistically with current timestamp
+            const optimisticMessage = {
+                _id: Date.now().toString(),
+                content,
+                sender: 'user',
+                timestamp: getCurrentDateTime(),
+                createdAt: getCurrentDateTime(),
             };
+
+            // Update messages immediately
+            set({
+                messages: [...state.messages, optimisticMessage]
+            });
+
+            const response = await fetch(`${API_BASE_URL}/api/chats/${chatId}/messages`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${state.user.token}`,
+                },
+                body: JSON.stringify({
+                    content,
+                    timestamp: getCurrentDateTime(),
+                    createdAt: getCurrentDateTime(),
+                }),
+            });
+
+            if (!response.ok) {
+                // Remove optimistic message on error
+                set({
+                    messages: state.messages.filter(msg => msg._id !== optimisticMessage._id)
+                });
+                throw new Error('Failed to send message');
+            }
+
+            const data = await response.json();
+
+            // Fix any backdated timestamps in the response
+            if (data.userMessage) {
+                data.userMessage.timestamp = ensureCurrentDate(data.userMessage.timestamp);
+                data.userMessage.createdAt = ensureCurrentDate(data.userMessage.createdAt);
+            }
+
+            if (data.aiResponse) {
+                data.aiResponse.timestamp = ensureCurrentDate(data.aiResponse.timestamp);
+                data.aiResponse.createdAt = ensureCurrentDate(data.aiResponse.createdAt);
+            }
+
+            // Replace optimistic message with real response
+            const newMessages = state.messages.filter(msg => msg._id !== optimisticMessage._id);
+
+            if (data.userMessage) {
+                newMessages.push(data.userMessage);
+            }
+
+            if (data.aiResponse) {
+                newMessages.push(data.aiResponse);
+            }
+
+            set({
+                messages: newMessages,
+                sending: false
+            });
+
+            return data;
         } catch (error) {
-            set({ loading: false });
-            if (error.response?.status === 429) {
-                set({ error: "You have reached the daily limit for AI requests. Please try again tomorrow or upgrade your plan." });
-                throw new Error("You have reached the daily limit for AI requests. Please try again tomorrow or upgrade your plan.");
-            }
-            if (error.response?.status === 503) {
-                set({ error: "The AI service is currently overloaded. Please try again in a few minutes." });
-                throw new Error("The AI service is currently overloaded. Please try again in a few minutes.");
-            }
-            const errorMessage = error.response?.data?.message || 'Failed to create project from chat';
-            set({ error: errorMessage });
-            if (error.response?.status === 400) {
-                throw new Error('Unable to extract project information from the conversation. Please provide more specific project details in your chat.');
-            }
-            throw new Error(errorMessage);
+            set({ sending: false, error: error.message });
+            throw error;
         }
     },
 
