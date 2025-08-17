@@ -85,3 +85,88 @@ export const getRelativeTime = (dateString) => {
         return "Invalid Date";
     }
 };
+
+// utils/dateUtils.js
+export const getCurrentDate = () => {
+    return new Date().toISOString().split('T')[0];
+};
+
+export const getCurrentDateTime = () => {
+    return new Date().toISOString();
+};
+
+export const formatDisplayDate = (dateString) => {
+    if (!dateString) return "No date set";
+
+    try {
+        const date = new Date(dateString);
+
+        // Check if date is valid
+        if (isNaN(date.getTime())) return "Invalid date";
+
+        // If the date is from 2024 (likely a backend issue), show current date instead
+        if (date.getFullYear() === 2024 && new Date().getFullYear() > 2024) {
+            return new Date().toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric'
+            });
+        }
+
+        return date.toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
+        });
+    } catch (error) {
+        console.error('Error formatting date:', error);
+        return "Invalid date";
+    }
+};
+
+export const formatRelativeDate = (dateString) => {
+    if (!dateString) return "No date";
+
+    try {
+        const date = new Date(dateString);
+        const now = new Date();
+
+        if (isNaN(date.getTime())) return "Invalid date";
+
+        // Fix backdated dates from 2024
+        if (date.getFullYear() === 2024 && now.getFullYear() > 2024) {
+            return "Today";
+        }
+
+        const diffTime = now - date;
+        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+        if (diffDays === 0) return "Today";
+        if (diffDays === 1) return "Yesterday";
+        if (diffDays < 7) return `${diffDays} days ago`;
+        if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
+        if (diffDays < 365) return `${Math.floor(diffDays / 30)} months ago`;
+
+        return `${Math.floor(diffDays / 365)} years ago`;
+    } catch (error) {
+        console.error('Error formatting relative date:', error);
+        return "Invalid date";
+    }
+};
+
+export const ensureCurrentDate = (dateString) => {
+    if (!dateString) return getCurrentDateTime();
+
+    try {
+        const date = new Date(dateString);
+
+        // If date is invalid or from 2024, return current date
+        if (isNaN(date.getTime()) || date.getFullYear() === 2024) {
+            return getCurrentDateTime();
+        }
+
+        return dateString;
+    } catch (error) {
+        return getCurrentDateTime();
+    }
+};

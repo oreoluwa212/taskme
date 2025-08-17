@@ -4,6 +4,7 @@ import Button from "../ui/Button";
 
 const EmptyState = ({
   onCreateChat,
+  onCreateProject,
   isMobile,
   onToggleSidebar,
   hasChats = false,
@@ -53,6 +54,7 @@ const EmptyState = ({
 
             <div className="space-y-3 flex flex-col items-center">
               {/* Main action button */}
+              
               <Button
                 onClick={onCreateChat}
                 variant="primary"
@@ -81,9 +83,8 @@ const EmptyState = ({
             <div className="mt-8 pt-6 border-t border-gray-200">
               <p className="text-xs text-gray-500">
                 {hasChats
-                  ? `You have ${chatCount} chat${
-                      chatCount !== 1 ? "s" : ""
-                    } saved`
+                  ? `You have ${chatCount} chat${chatCount !== 1 ? "s" : ""
+                  } saved`
                   : "Your conversations will appear here once you start chatting"}
               </p>
             </div>

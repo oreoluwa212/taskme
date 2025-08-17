@@ -9,6 +9,8 @@ import EmptyState from "../../components/chats/EmptyState";
 import NewChatModal from "../../components/chats/NewChatModal";
 import ProjectCreationModal from "../../components/chats/ProjectCreationModal";
 import ChatSuggestions from "../../components/chats/ChatSuggestions";
+import ProjectCreationForm from "../../components/chats/ProjectCreationForm";
+import UserAvatar from "../../components/common/UserAvatar";
 
 const Chats = () => {
   const navigate = useNavigate();
@@ -19,6 +21,7 @@ const Chats = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [creatingProject, setCreatingProject] = useState(false);
+  const [showProjectForm, setShowProjectForm] = useState(false);
 
   const isMobile = useMediaQuery("(max-width: 768px)");
 
@@ -59,6 +62,30 @@ const Chats = () => {
       }
     }
   }, [isMobile, chats, selectedChatId]);
+  const handleProjectFormSubmit = useCallback(async (projectData, structuredPrompt) => {
+    try {
+      // First create a new chat with the structured prompt
+      const newChat = await createChat({
+        title: projectData.name,
+        initialMessage: structuredPrompt
+      });
+
+      setSelectedChatId(newChat._id);
+      setShowProjectForm(false);
+
+      if (isMobile) {
+        setSidebarOpen(false);
+      }
+
+      // Send the structured prompt as the first message
+      await sendMessage(newChat._id, structuredPrompt);
+
+      toast.success("Project chat created successfully!");
+    } catch (error) {
+      console.error("Error creating project chat:", error);
+      toast.error("Failed to create project chat");
+    }
+  }, [createChat, sendMessage, isMobile]);
 
   const handleSelectChat = useCallback(
     async (chat) => {
@@ -287,6 +314,13 @@ const Chats = () => {
     }
   }, [isMobile]);
 
+  const openProjectForm = useCallback(() => {
+    setShowProjectForm(true);
+    if (isMobile) {
+      setSidebarOpen(false);
+    }
+  }, [isMobile]);
+
   const closeNewChatModal = useCallback(() => {
     setShowNewChatModal(false);
     setNewChatTitle("");
@@ -304,9 +338,8 @@ const Chats = () => {
           )}
 
           <div
-            className={`fixed left-0 top-0 h-full z-50 transform transition-transform duration-300 lg:hidden ${
-              sidebarOpen ? "translate-x-0" : "-translate-x-full"
-            }`}
+            className={`fixed left-0 top-0 h-full z-50 transform transition-transform duration-300 lg:hidden ${sidebarOpen ? "translate-x-0" : "-translate-x-full"
+              }`}
           >
             <ChatSidebar
               chats={chats}
@@ -354,8 +387,7 @@ const Chats = () => {
     user?.avatar?.url || user?.profilePicture || user?.profileImage;
   const userName =
     user?.name || user?.username || user?.firstname || user?.firstName
-      ? `${user?.firstname || user?.firstName} ${
-          user?.lastname || user?.lastName || ""
+      ? `${user?.firstname || user?.firstName} ${user?.lastname || user?.lastName || ""
         }`.trim()
       : user?.email?.split("@")[0] || null;
 
@@ -367,6 +399,7 @@ const Chats = () => {
         {shouldShowEmptyState() ? (
           <EmptyState
             onCreateChat={openNewChatModal}
+            onCreateProject={openProjectForm} // Add this prop
             isMobile={isMobile}
             onToggleSidebar={isMobile ? toggleSidebar : undefined}
             hasChats={chats.length > 0}
@@ -386,7 +419,7 @@ const Chats = () => {
             isMobile={isMobile}
             error={error}
             clearError={clearError}
-            userAvatar={userAvatar}
+            userAvatar={<UserAvatar user={user} />} // Use the new UserAvatar component
             userName={userName}
           />
         )}
@@ -403,6 +436,13 @@ const Chats = () => {
       <ProjectCreationModal
         isOpen={creatingProject}
         chatTitle={currentChat?.title}
+      />
+
+      <ProjectCreationForm
+        isOpen={showProjectForm}
+        onClose={() => setShowProjectForm(false)}
+        onSubmit={handleProjectFormSubmit}
+        loading={loading || sending}
       />
     </div>
   );
